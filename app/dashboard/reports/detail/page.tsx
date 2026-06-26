@@ -219,29 +219,37 @@ export default function DetailReportsPage() {
     fetchEmployees();
   }, []);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!selectedEmployee || dailyReports.length === 0) return;
 
-    // Create CSV content
-    const headers = ["Tanggal", "Hari", "Shift", "Masuk", "Pulang", "Absensi", "Keterangan"];
-    const rows = dailyReports.map((r) => [
-      r.date,
-      r.dayName,
-      r.schedule?.name || "-",
-      r.clockIn || "-",
-      r.clockOut || "-",
-      r.status,
-      r.notes,
-    ]);
+    try {
+      const [year, monthNum] = month.split("-");
+      const startDate = `${month}-01`;
+      const endDate = `${year}-${monthNum}-${new Date(parseInt(year), parseInt(monthNum), 0).getDate()}`;
 
-    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `laporan-${selectedEmployee.name}-${month}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const params = new URLSearchParams({
+        employeeId: selectedEmployee.id,
+        startDate,
+        endDate,
+      });
+
+      const res = await fetch(`/api/export/excel?${params.toString()}`);
+
+      if (!res.ok) {
+        alert("Gagal export Excel");
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `laporan-${selectedEmployee.name}-${month}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert("Gagal export Excel");
+    }
   };
 
   return (

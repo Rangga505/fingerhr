@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         type,
         deviceCloudId: cloud_id,
         status: "SUCCESS",
-        payload: body,
+        payload: body as any,
       },
     });
 
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
             type: body.type || "unknown",
             deviceCloudId: body.cloud_id || "unknown",
             status: "FAILED",
-            payload: body,
+        payload: body as any,
           },
         });
       }

@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       where: { id: apiLog.id },
       data: {
         status: result.success ? "SUCCESS" : "FAILED",
-        responsePayload: result,
+        responsePayload: result as any,
         errorMessage: result.success ? null : result.error,
       },
     });

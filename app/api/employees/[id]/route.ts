@@ -107,7 +107,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Validasi gagal", details: error.errors },
+        { error: "Validasi gagal", details: error.issues },
         { status: 400 }
       );
     }

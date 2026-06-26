@@ -143,7 +143,7 @@ export async function POST(
       where: { id: apiLog.id },
       data: {
         status,
-        responsePayload: result,
+        responsePayload: result as any,
         errorMessage: result?.success ? null : result?.error,
         duration,
       },

@@ -202,3 +202,15 @@ model WebhookLog {
   @@index([createdAt])
   @@map("webhook_logs")
 }
+
+// ============================================
+// SYSTEM SETTINGS (Key-Value Store)
+// ============================================
+
+model SystemSettings {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}

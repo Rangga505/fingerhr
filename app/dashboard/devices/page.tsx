@@ -26,8 +26,10 @@ interface ApiLogEntry {
   id: string;
   command: string;
   deviceCloudId: string;
+  transId: string | null;
   status: string;
   duration: number | null;
+  errorMessage: string | null;
   createdAt: string;
 }
 
@@ -110,8 +112,10 @@ export default function DevicesPage() {
           id: Date.now().toString(),
           command,
           deviceCloudId: device.cloudId,
+          transId: null,
           status: data.success ? "SUCCESS" : "FAILED",
           duration: data.duration,
+          errorMessage: null,
           createdAt: new Date().toISOString(),
         },
         ...prev,
@@ -250,6 +254,9 @@ export default function DevicesPage() {
                       ip: device.ip || "-",
                       status: device.status as any,
                       lastSync: device.lastSync || "-",
+                      timezone: "",
+                      location: "",
+                      firmware: "",
                     }}
                     isSelected={selectedDevice === device.cloudId}
                     onSelect={setSelectedDevice}
@@ -272,11 +279,15 @@ export default function DevicesPage() {
           <CommandHistoryPanel
             commands={apiLogs.map((log) => ({
               id: log.id,
-              command: log.command,
-              device: log.deviceCloudId,
-              status: log.status as any,
-              timestamp: log.createdAt,
+              deviceCloudId: log.deviceCloudId,
+              deviceName: log.deviceCloudId,
+              commandType: log.command.toLowerCase() as any,
+              transId: log.transId || "",
+              status: log.status.toLowerCase() as any,
+              requestTime: log.createdAt,
+              completedTime: log.createdAt,
               duration: log.duration ? `${log.duration}ms` : "-",
+              errorMessage: log.errorMessage || null,
             }))}
           />
         </div>

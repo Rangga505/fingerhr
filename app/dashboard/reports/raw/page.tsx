@@ -68,6 +68,12 @@ export default function RawReportsPage() {
     fetchLogs();
   }, [startDate, endDate, filterEmployee]);
 
+  // Auto-refresh setiap 30 detik
+  useEffect(() => {
+    const interval = setInterval(fetchLogs, 30000);
+    return () => clearInterval(interval);
+  }, [startDate, endDate, filterEmployee]);
+
   const handleDownloadFromDevice = async () => {
     setDownloading(true);
     try {

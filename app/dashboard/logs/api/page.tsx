@@ -12,6 +12,8 @@ interface ApiLog {
   status: string;
   duration: number | null;
   errorMessage: string | null;
+  requestPayload: unknown;
+  responsePayload: unknown;
   createdAt: string;
 }
 
@@ -40,6 +42,12 @@ export default function ApiLogsPage() {
 
   useEffect(() => {
     fetchLogs();
+  }, [filterCommand, filterStatus]);
+
+  // Auto-refresh setiap 10 detik
+  useEffect(() => {
+    const interval = setInterval(fetchLogs, 10000);
+    return () => clearInterval(interval);
   }, [filterCommand, filterStatus]);
 
   const formatDuration = (ms: number | null) => {
@@ -226,6 +234,18 @@ export default function ApiLogsPage() {
                 <div className="rounded-xl bg-error/10 px-4 py-3">
                   <p className="text-sm font-medium text-error">Error</p>
                   <p className="mt-1 text-sm text-on-surface-variant">{selectedLog.errorMessage}</p>
+                </div>
+              )}
+              {!!selectedLog.requestPayload && (
+                <div className="rounded-xl bg-white/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-on-surface">Request Payload</p>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs text-on-surface-variant">{JSON.stringify(selectedLog.requestPayload, null, 2)}</pre>
+                </div>
+              )}
+              {!!selectedLog.responsePayload && (
+                <div className="rounded-xl bg-white/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-on-surface">Response Payload</p>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs text-on-surface-variant">{JSON.stringify(selectedLog.responsePayload, null, 2)}</pre>
                 </div>
               )}
             </div>

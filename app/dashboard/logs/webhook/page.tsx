@@ -9,6 +9,7 @@ interface WebhookLog {
   type: string;
   deviceCloudId: string;
   status: string;
+  payload: unknown;
   createdAt: string;
 }
 
@@ -198,6 +199,12 @@ export default function WebhookLogsPage() {
                   {selectedLog.status}
                 </Badge>
               </div>
+              {!!selectedLog.payload && (
+                <div className="rounded-xl bg-white/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-on-surface">Payload</p>
+                  <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-all text-xs text-on-surface-variant">{JSON.stringify(selectedLog.payload, null, 2)}</pre>
+                </div>
+              )}
             </div>
             <div className="mt-6 flex justify-end">
               <button
