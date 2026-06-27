@@ -34,7 +34,7 @@ const statusConfig: Record<DeviceStatus, { label: string; dot: string; bg: strin
 };
 
 export function DeviceStatusBadge({ status, className }: DeviceStatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status.toLowerCase() as DeviceStatus] ?? statusConfig.offline;
 
   return (
     <span

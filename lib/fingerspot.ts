@@ -34,12 +34,23 @@ async function callFingerspotAPI(
       }),
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: `API returned non-JSON (${response.status}): ${text.substring(0, 200)}`,
+      };
+    }
     
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || "API request failed",
+        error: data.message || `API error ${response.status}`,
       };
     }
 
@@ -72,9 +83,10 @@ export async function getAttendanceLog(
 /**
  * Get User Info (Response via webhook)
  */
-export async function getUserInfo(pin: string) {
+export async function getUserInfo(pin: string, transId: string = "1") {
   return callFingerspotAPI("get_userinfo", {
     pin,
+    trans_id: transId,
   });
 }
 
@@ -109,8 +121,10 @@ export async function deleteUserInfo(pin: string) {
 /**
  * Get All PIN from device (Response via webhook)
  */
-export async function getAllPin() {
-  return callFingerspotAPI("get_all_pin", {});
+export async function getAllPin(transId: string = "1") {
+  return callFingerspotAPI("get_all_pin", {
+    trans_id: transId,
+  });
 }
 
 /**
@@ -134,8 +148,10 @@ export async function registerOnline(pin: string) {
 /**
  * Restart Device
  */
-export async function restartDevice() {
-  return callFingerspotAPI("restart", {});
+export async function restartDevice(transId: string = "1") {
+  return callFingerspotAPI("restart_device", {
+    trans_id: transId,
+  });
 }
 
 /**

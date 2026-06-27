@@ -24,12 +24,11 @@ async function main() {
   const device = await prisma.device.create({
     data: {
       cloudId: "C269248053121C21",
-      name: "Mesin Absensi REVO Lantai 1",
+      name: "REVO 208",
       type: "REVO",
-      ip: null, // Will be updated from Get Device response
+      ip: null,
       status: "OFFLINE",
       timezone: "Asia/Jakarta",
-      companyId: null, // Set this if you have company data
     },
   });
 

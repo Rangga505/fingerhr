@@ -12,8 +12,9 @@ export interface DeviceCardProps {
 }
 
 function formatDate(dateString: string | null): string {
-  if (!dateString) return "Never";
+  if (!dateString || dateString === "-") return "Never";
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "Never";
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);

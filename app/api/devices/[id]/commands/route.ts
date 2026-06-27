@@ -125,7 +125,7 @@ export async function POST(
           break;
 
         case "RESTART":
-          result = await restartDevice();
+          result = await restartDevice(transId || "1");
           break;
 
         default:

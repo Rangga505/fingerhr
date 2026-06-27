@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { getUserInfo } from "@/lib/fingerspot";
 
 interface WebhookPayload {
   type: string;
@@ -185,19 +186,28 @@ async function handleAttlog(deviceId: string, data: Record<string, any>) {
 async function handleUserinfo(deviceId: string, data: Record<string, any>) {
   const { pin, name, card, privilege } = data;
 
-  console.log("[Webhook] Userinfo received:", { pin, name });
+  console.log("[Webhook] Userinfo received:", { pin, name, card, privilege });
 
-  // Update or create employee
-  if (pin && name) {
-    await prisma.employee.upsert({
-      where: { pin: String(pin) },
-      update: { name: String(name) },
-      create: {
-        pin: String(pin),
-        name: String(name),
-      },
-    });
+  if (!pin || !name) {
+    console.warn("[Webhook] Userinfo missing required fields:", data);
+    return;
   }
+
+  // Upsert employee - update if exists, create if not
+  const employee = await prisma.employee.upsert({
+    where: { pin: String(pin) },
+    update: { 
+      name: String(name),
+      isActive: true,
+    },
+    create: {
+      pin: String(pin),
+      name: String(name),
+      isActive: true,
+    },
+  });
+
+  console.log("[Webhook] Employee synced:", { id: employee.id, pin: employee.pin, name: employee.name });
 }
 
 async function handleSetUserinfo(deviceId: string, data: Record<string, any>) {
@@ -211,8 +221,32 @@ async function handleDeleteUserinfo(deviceId: string, data: Record<string, any>)
 }
 
 async function handleGetAllPin(deviceId: string, data: Record<string, any>) {
-  const { pins } = data;
+  const { pins, trans_id } = data;
   console.log("[Webhook] All PINs received:", pins);
+
+  // Auto-trigger GetUserinfo untuk setiap PIN
+  if (Array.isArray(pins)) {
+    console.log(`[Webhook] Auto-triggering GetUserinfo for ${pins.length} PINs`);
+    
+    for (const pin of pins) {
+      try {
+        const pinStr = String(pin);
+        console.log(`[Webhook] Getting userinfo for PIN: ${pinStr}`);
+        
+        const result = await getUserInfo(pinStr, trans_id || "1");
+        
+        if (result.success && result.data) {
+          console.log(`[Webhook] Userinfo received for PIN ${pinStr}:`, result.data);
+        } else {
+          console.warn(`[Webhook] Failed to get userinfo for PIN ${pinStr}:`, result.error);
+        }
+      } catch (error) {
+        console.error(`[Webhook] Error getting userinfo for PIN ${pin}:`, error);
+      }
+    }
+    
+    console.log(`[Webhook] Finished triggering GetUserinfo for all PINs`);
+  }
 }
 
 async function handleSetTime(deviceId: string, data: Record<string, any>) {
