@@ -34,6 +34,7 @@ const statusConfig: Record<CommandStatus, { label: string; dot: string; bg: stri
 };
 
 const commandTypeLabels: Record<CommandType, string> = {
+  get_device: "Get Device",
   get_attlog: "Get Attlog",
   get_userinfo: "Get Userinfo",
   get_all_pin: "Get All PIN",
