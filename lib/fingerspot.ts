@@ -99,14 +99,25 @@ export async function setUserInfo(userData: {
   password?: string;
   card?: string;
   privilege?: string; // "0" = user, "14" = admin
+  face?: string; // Base64 face photo for VIVO/VIDA/DS/DT series
 }) {
-  return callFingerspotAPI("set_userinfo", {
+  const body: Record<string, any> = {
     pin: userData.pin,
     name: userData.name,
     password: userData.password || "",
     card: userData.card || "",
     privilege: userData.privilege || "0",
-  });
+  };
+
+  // For VIVO/VIDA/DS/DT series, include face photo in template
+  if (userData.face) {
+    // Format: {"face":"<base64>"} then encode again to base64
+    const faceJson = JSON.stringify({ face: userData.face });
+    const templateBase64 = Buffer.from(faceJson).toString("base64");
+    body.template = templateBase64;
+  }
+
+  return callFingerspotAPI("set_userinfo", body);
 }
 
 /**

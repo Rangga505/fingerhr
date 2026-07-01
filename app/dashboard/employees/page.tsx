@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, Button, Badge, Input } from "@/components/ui";
 import { Breadcrumbs } from "@/components/layout";
 
@@ -17,8 +17,19 @@ interface Employee {
   createdAt: string;
 }
 
+interface Device {
+  id: string;
+  name: string;
+  model: string;
+  ipAddress: string;
+  isActive: boolean;
+}
+
+type SyncStep = "sending" | "registering" | "done" | "error";
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -34,6 +45,17 @@ export default function EmployeesPage() {
     mode: null,
   });
 
+  // Loading popup state
+  const [showLoadingPopup, setShowLoadingPopup] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<SyncStep>("sending");
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const [loadingError, setLoadingError] = useState("");
+
+  // Face photo state
+  const [facePhoto, setFacePhoto] = useState<string | null>(null);
+  const [facePreview, setFacePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Form state
   const [form, setForm] = useState({
     pin: "",
@@ -45,11 +67,17 @@ export default function EmployeesPage() {
   });
   const [formLoading, setFormLoading] = useState(false);
 
+  // Device type detection for face support
+  const supportsFace = (model: string) => {
+    const m = model.toUpperCase();
+    return m.includes("VIVO") || m.includes("VIDA") || m.includes("DS") || m.includes("DT");
+  };
+
   const fetchEmployees = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
-      
+
       const res = await fetch(`/api/employees?${params}`);
       const data = await res.json();
       setEmployees(data.employees || []);
@@ -60,9 +88,54 @@ export default function EmployeesPage() {
     }
   }, [search]);
 
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await fetch("/api/devices");
+      const data = await res.json();
+      setDevices(data.devices || []);
+    } catch (error) {
+      console.error("Failed to fetch devices:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchEmployees();
-  }, [fetchEmployees]);
+    fetchDevices();
+  }, [fetchEmployees, fetchDevices]);
+
+  // Face photo handling
+  const handleFacePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 100KB)
+    if (file.size > 100 * 1024) {
+      alert("Ukuran foto wajah maksimal 100KB!");
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith("image/")) {
+      alert("File harus berupa gambar!");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setFacePhoto(base64);
+      setFacePreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeFacePhoto = () => {
+    setFacePhoto(null);
+    setFacePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   // Sync from device
   const handleSyncFromDevice = async () => {
@@ -144,7 +217,7 @@ export default function EmployeesPage() {
     }
   };
 
-  // Add employee
+  // Add employee with face photo
   const handleAddEmployee = async () => {
     if (!form.pin || !form.name) {
       alert("PIN dan Nama wajib diisi");
@@ -152,8 +225,13 @@ export default function EmployeesPage() {
     }
 
     setFormLoading(true);
+    setShowLoadingPopup(true);
+    setLoadingStep("sending");
+    setLoadingMessage("Mengirim data ke mesin absensi...");
+    setLoadingError("");
+
     try {
-      // First add to device
+      // Step 1: Send to device
       const syncRes = await fetch("/api/employees/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,17 +239,33 @@ export default function EmployeesPage() {
           action: "add-to-device",
           pin: form.pin,
           name: form.name,
+          email: form.email || null,
+          phone: form.phone || null,
+          department: form.department || null,
+          position: form.position || null,
+          face: facePhoto || null,
         }),
       });
 
       const syncData = await syncRes.json();
 
       if (!syncData.success) {
-        alert(`Gagal mengirim ke mesin: ${syncData.error}`);
+        setLoadingStep("error");
+        setLoadingError(`Gagal mengirim ke mesin: ${syncData.error}`);
         return;
       }
 
-      // Also add to database (if not already added by sync)
+      // Step 2: If face photo, register face
+      if (facePhoto && devices.some((d) => supportsFace(d.model))) {
+        setLoadingStep("registering");
+        setLoadingMessage("Mendaftarkan foto wajah ke mesin...");
+
+        // The face is already sent in the add-to-device action
+        // Just wait a moment for the device to process
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      // Step 3: Save to database (if not already added by sync)
       const existingRes = await fetch(`/api/employees?search=${form.pin}`);
       const existingData = await existingRes.json();
       const exists = existingData.employees?.some((e: Employee) => e.pin === form.pin);
@@ -192,19 +286,31 @@ export default function EmployeesPage() {
 
         if (!res.ok) {
           const err = await res.json();
-          alert(`Gagal menyimpan ke database: ${err.error}`);
+          setLoadingStep("error");
+          setLoadingError(`Gagal menyimpan ke database: ${err.error}`);
           return;
         }
       }
 
-      setShowAddModal(false);
-      setForm({ pin: "", name: "", email: "", phone: "", department: "", position: "" });
+      // Success
+      setLoadingStep("done");
+      setLoadingMessage(`Berhasil menambahkan ${form.name}`);
       fetchEmployees();
-      alert(`Berhasil menambahkan ${form.name} ke mesin dan database`);
     } catch (error) {
-      alert("Gagal menambahkan karyawan");
+      setLoadingStep("error");
+      setLoadingError("Gagal menambahkan karyawan");
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  // Close loading popup and reset form
+  const handleCloseLoadingPopup = () => {
+    setShowLoadingPopup(false);
+    if (loadingStep === "done") {
+      setShowAddModal(false);
+      setForm({ pin: "", name: "", email: "", phone: "", department: "", position: "" });
+      removeFacePhoto();
     }
   };
 
@@ -212,7 +318,6 @@ export default function EmployeesPage() {
   const handleDelete = async (employee: Employee, deleteFromDevice: boolean) => {
     try {
       if (deleteFromDevice) {
-        // Delete from device first
         const syncRes = await fetch("/api/employees/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -226,7 +331,6 @@ export default function EmployeesPage() {
         }
       }
 
-      // Delete from database
       const res = await fetch(`/api/employees/${employee.id}`, {
         method: "DELETE",
       });
@@ -277,6 +381,8 @@ export default function EmployeesPage() {
       setSelectedIds(employees.map((e) => e.id));
     }
   };
+
+  const hasFaceDevice = devices.some((d) => supportsFace(d.model));
 
   return (
     <div className="space-y-6">
@@ -507,7 +613,7 @@ export default function EmployeesPage() {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddModal(false)}>
-          <div className="glass max-w-lg w-full rounded-[2rem] p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="glass max-w-lg w-full rounded-[2rem] p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-on-surface">Tambah Karyawan</h3>
               <button onClick={() => setShowAddModal(false)} className="text-on-surface-variant hover:text-on-surface">
@@ -556,6 +662,69 @@ export default function EmployeesPage() {
                   onChange={(e) => setForm({ ...form, position: e.target.value })}
                 />
               </div>
+
+              {/* Face Photo Section */}
+              {hasFaceDevice && (
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                    <span className="text-sm font-medium text-on-surface">Foto Wajah (VIVO/VIDA/DS/DT)</span>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-3">
+                    Maksimal 100KB, wajah harus terlihat jelas dan close-up
+                  </p>
+
+                  {facePreview ? (
+                    <div className="flex items-start gap-4">
+                      <div className="relative">
+                        <img
+                          src={facePreview}
+                          alt="Face preview"
+                          className="h-24 w-24 rounded-xl object-cover border border-white/[0.1]"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeFacePhoto}
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 flex items-center justify-center text-white hover:bg-red-600"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-on-surface">Foto wajah siap</p>
+                        <p className="text-xs text-on-surface-variant mt-1">
+                          Foto akan didaftarkan ke mesin absensi
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/[0.1] bg-white/[0.02] p-6 cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-all"
+                    >
+                      <svg className="h-8 w-8 text-on-surface-variant mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                      </svg>
+                      <p className="text-sm text-on-surface-variant">Klik untuk upload foto wajah</p>
+                      <p className="text-xs text-on-surface-variant mt-1">JPG, PNG, maks 100KB</p>
+                    </div>
+                  )}
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFacePhotoChange}
+                    className="hidden"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex gap-3">
@@ -565,6 +734,118 @@ export default function EmployeesPage() {
               <Button variant="primary" size="md" onClick={handleAddEmployee} disabled={formLoading} className="flex-1">
                 {formLoading ? "Menambahkan..." : "Tambah & Sync ke Mesin"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Popup */}
+      {showLoadingPopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="glass max-w-sm w-full rounded-[2rem] p-6">
+            <div className="flex flex-col items-center text-center">
+              {/* Icon */}
+              {loadingStep === "sending" && (
+                <div className="relative h-16 w-16 mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+                  <div className="absolute inset-0 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                    </svg>
+                  </div>
+                </div>
+              )}
+
+              {loadingStep === "registering" && (
+                <div className="relative h-16 w-16 mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-blue-500/20" />
+                  <div className="absolute inset-0 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                  </div>
+                </div>
+              )}
+
+              {loadingStep === "done" && (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 mb-4">
+                  <svg className="h-8 w-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </div>
+              )}
+
+              {loadingStep === "error" && (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 mb-4">
+                  <svg className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Message */}
+              <h4 className="text-lg font-semibold text-on-surface mb-2">
+                {loadingStep === "sending" && "Mengirim ke Mesin"}
+                {loadingStep === "registering" && "Mendaftarkan Wajah"}
+                {loadingStep === "done" && "Berhasil!"}
+                {loadingStep === "error" && "Gagal"}
+              </h4>
+
+              <p className="text-sm text-on-surface-variant mb-4">
+                {loadingMessage}
+              </p>
+
+              {loadingError && (
+                <div className="w-full rounded-xl bg-red-500/10 border border-red-500/20 p-3 mb-4">
+                  <p className="text-sm text-red-400">{loadingError}</p>
+                </div>
+              )}
+
+              {/* Progress Steps */}
+              {(loadingStep === "sending" || loadingStep === "registering") && (
+                <div className="w-full space-y-2 mt-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-6 w-6 rounded-full flex items-center justify-center ${loadingStep === "sending" ? "bg-primary animate-pulse" : "bg-emerald-500"}`}>
+                      {loadingStep === "sending" ? (
+                        <div className="h-2 w-2 rounded-full bg-white" />
+                      ) : (
+                        <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-xs text-on-surface-variant">Mengirim data karyawan</span>
+                  </div>
+                  {hasFaceDevice && (
+                    <div className="flex items-center gap-3">
+                      <div className={`h-6 w-6 rounded-full flex items-center justify-center ${loadingStep === "registering" ? "bg-primary animate-pulse" : "bg-white/10"}`}>
+                        {loadingStep === "registering" ? (
+                          <div className="h-2 w-2 rounded-full bg-white" />
+                        ) : (
+                          <div className="h-2 w-2 rounded-full bg-white/30" />
+                        )}
+                      </div>
+                      <span className="text-xs text-on-surface-variant">Mendaftarkan foto wajah</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Close Button */}
+              {(loadingStep === "done" || loadingStep === "error") && (
+                <Button variant="primary" size="md" onClick={handleCloseLoadingPopup} className="w-full mt-2">
+                  {loadingStep === "done" ? "Selesai" : "Tutup"}
+                </Button>
+              )}
+
+              {(loadingStep === "sending" || loadingStep === "registering") && (
+                <p className="text-xs text-on-surface-variant mt-4">
+                  Jangan tutup halaman ini...
+                </p>
+              )}
             </div>
           </div>
         </div>

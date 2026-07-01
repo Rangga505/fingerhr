@@ -192,13 +192,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Set user info ke device
+        // Set user info ke device (with optional face photo)
         const setResult = await setUserInfo({
           pin,
           name,
           password: password || "",
           card: card || "",
           privilege: privilege || "0",
+          face: body.face || undefined,
         });
 
         await prisma.apiLog.create({
@@ -206,7 +207,7 @@ export async function POST(request: NextRequest) {
             command: "SET_USERINFO",
             deviceCloudId: device.cloudId,
             status: setResult.success ? "SUCCESS" : "FAILED",
-            requestPayload: { pin, name, privilege },
+            requestPayload: { pin, name, privilege, hasFace: !!body.face },
             responsePayload: setResult.data,
             errorMessage: setResult.success ? null : setResult.error,
           },
@@ -238,6 +239,10 @@ export async function POST(request: NextRequest) {
           data: {
             pin,
             name,
+            email: body.email || null,
+            phone: body.phone || null,
+            department: body.department || null,
+            position: body.position || null,
             isActive: true,
           },
         });
