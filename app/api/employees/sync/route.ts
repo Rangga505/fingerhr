@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
           name,
           password: password || "",
           card: card || "",
-          privilege: privilege || "0",
+          privilege: privilege || "1", // 1 = user, 2 = admin, 3 = subadmin
         });
 
         await prisma.apiLog.create({
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
           name,
           password: password || "",
           card: card || "",
-          privilege: privilege || "0",
+          privilege: privilege || "1", // 1 = user, 2 = admin, 3 = subadmin
           face: body.face || undefined,
         });
 
@@ -220,8 +220,8 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Register online
-        const regResult = await registerOnline(pin);
+        // Register online (verification: 0 = fingerprint)
+        const regResult = await registerOnline(pin, "0");
         
         await prisma.apiLog.create({
           data: {

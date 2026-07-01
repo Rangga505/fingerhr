@@ -98,15 +98,16 @@ export async function setUserInfo(userData: {
   name: string;
   password?: string;
   card?: string;
-  privilege?: string; // "0" = user, "14" = admin
+  privilege?: string; // "1" = user, "2" = admin, "3" = subadmin
   face?: string; // Base64 face photo for VIVO/VIDA/DS/DT series
 }) {
-  const body: Record<string, any> = {
+  const dataBody: Record<string, any> = {
     pin: userData.pin,
     name: userData.name,
     password: userData.password || "",
-    card: userData.card || "",
-    privilege: userData.privilege || "0",
+    rfid: userData.card || "",
+    privilege: userData.privilege || "1", // Default: 1 = user
+    template: "",
   };
 
   // For VIVO/VIDA/DS/DT series, include face photo in template
@@ -114,10 +115,11 @@ export async function setUserInfo(userData: {
     // Format: {"face":"<base64>"} then encode again to base64
     const faceJson = JSON.stringify({ face: userData.face });
     const templateBase64 = Buffer.from(faceJson).toString("base64");
-    body.template = templateBase64;
+    dataBody.template = templateBase64;
   }
 
-  return callFingerspotAPI("set_userinfo", body);
+  // Fingerspot API requires user data wrapped in "data" object
+  return callFingerspotAPI("set_userinfo", { data: dataBody });
 }
 
 /**
@@ -149,10 +151,15 @@ export async function setDeviceTime(timezone: string = "Asia/Jakarta") {
 
 /**
  * Register Online (Response via webhook)
+ * verification: 0-9 = Jari, 12 = Wajah, 13 = Vein
+ * Note: Only supported on REVO, VEGA, and "Mesin Absensi Lain" series.
+ *       VIDA/VIVO/DS/DT series do NOT support reg_online.
  */
-export async function registerOnline(pin: string) {
+export async function registerOnline(pin: string, verification: string = "0") {
   return callFingerspotAPI("reg_online", {
+    trans_id: "1",
     pin,
+    verification,
   });
 }
 
