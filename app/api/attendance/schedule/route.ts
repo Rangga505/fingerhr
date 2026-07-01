@@ -4,8 +4,12 @@ import { z } from "zod";
 
 const scheduleSchema = z.object({
   name: z.string().min(1, "Nama jadwal wajib diisi"),
-  startTime: z.string().regex(/^([01]?[2-9]|1[0-2]):[0-5][0-9]$/, "Format jam: HH:MM"),
-  endTime: z.string().regex(/^([01]?[2-9]|1[0-2]):[0-5][0-9]$/, "Format jam: HH:MM"),
+  startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format jam: HH:MM"),
+  endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format jam: HH:MM"),
+  breakStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format jam: HH:MM").optional().nullable(),
+  breakEnd: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format jam: HH:MM").optional().nullable(),
+  overtimeStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format jam: HH:MM").optional().nullable(),
+  overtimeRate: z.number().min(1).max(5).optional().default(1.5),
   graceMinutes: z.number().min(0).max(120).optional().default(15),
 });
 
@@ -40,6 +44,10 @@ export async function POST(request: NextRequest) {
         name: validated.name,
         startTime: validated.startTime,
         endTime: validated.endTime,
+        breakStart: validated.breakStart,
+        breakEnd: validated.breakEnd,
+        overtimeStart: validated.overtimeStart,
+        overtimeRate: validated.overtimeRate ?? 1.5,
         graceMinutes: validated.graceMinutes ?? 15,
       },
     });

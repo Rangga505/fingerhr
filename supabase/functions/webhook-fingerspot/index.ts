@@ -16,11 +16,18 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  if (req.method === "GET") {
+    return new Response(
+      JSON.stringify({ status: "ok", message: "Fingerspot webhook endpoint is running" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const body = await req.json();
     const { type, cloud_id, data } = body;
 
-    console.log("[Webhook] Received:", type, cloud_id);
+    console.log("[Webhook] Received:", type, cloud_id, JSON.stringify(data));
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -47,21 +54,25 @@ Deno.serve(async (req) => {
         await handleAttlog(supabase, device.id, data);
         break;
       case "userinfo":
+      case "get_userinfo":
         await handleUserinfo(supabase, data);
         break;
       case "get_all_pin":
-        await handleGetAllPin(supabase, data);
+      case "get_userid_list":
+        await handleGetAllPin(supabase, data, body.trans_id);
         break;
       default:
         console.log("[Webhook] Unhandled type:", type);
     }
 
-    await supabase.from("webhook_logs").insert({
+    const { error: logErr } = await supabase.from("webhook_logs").insert({
+      id: crypto.randomUUID(),
       type,
       device_cloud_id: cloud_id,
       status: "SUCCESS",
       payload: body,
     });
+    if (logErr) console.error("[Webhook] log insert error:", logErr.message);
 
     return new Response(
       JSON.stringify({ status: "ok" }),
@@ -84,8 +95,29 @@ async function handleAttlog(supabase: any, deviceId: string, data: Record<string
   const { data: employee } = await supabase.from("employees").select("id").eq("pin", pin).single();
   if (!employee) return;
 
-  const status = data.status_scan === "1" || data.status_scan === 1 ? "IN" : "OUT";
-  const scanTime = new Date(scan as string);
+  // Parse scan time - device sends local time in WIB (Asia/Jakarta, UTC+7)
+  const scanTimeStr = String(scan).replace(" ", "T") + "+07:00";
+  const scanTime = new Date(scanTimeStr);
+
+  // Count existing logs for this employee today (in WIB timezone)
+  const wibDate = new Date(scanTime.getTime() + 7 * 60 * 60 * 1000);
+  const wibYear = wibDate.getUTCFullYear();
+  const wibMonth = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+  const wibDay = String(wibDate.getUTCDate()).padStart(2, "0");
+  const wibDateStr = `${wibYear}-${wibMonth}-${wibDay}`;
+
+  const startOfDay = new Date(`${wibDateStr}T00:00:00+07:00`);
+  const endOfDay = new Date(`${wibDateStr}T23:59:59.999+07:00`);
+
+  const { count: todayLogCount } = await supabase
+    .from("attendance_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("employee_id", employee.id)
+    .gte("scan_time", startOfDay.toISOString())
+    .lte("scan_time", endOfDay.toISOString());
+
+  // First scan of the day = IN, second = OUT, third = IN, etc.
+  const status = (todayLogCount || 0) % 2 === 0 ? "IN" : "OUT";
 
   await supabase.from("attendance_logs").insert({
     employee_id: employee.id,
@@ -101,22 +133,37 @@ async function handleAttlog(supabase: any, deviceId: string, data: Record<string
 async function handleUserinfo(supabase: any, data: Record<string, unknown>) {
   const pin = String(data.pin || "");
   const name = String(data.name || "");
-  if (!pin || !name) return;
+  if (!pin || !name) {
+    console.log("[handleUserinfo] SKIP: empty pin or name", JSON.stringify(data));
+    return;
+  }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: selErr } = await supabase
     .from("employees").select("id").eq("pin", pin).limit(1).maybeSingle();
 
+  if (selErr) {
+    console.error("[handleUserinfo] select error:", selErr.message);
+    return;
+  }
+
   if (existing) {
-    await supabase.from("employees").update({ name, is_active: true }).eq("pin", pin);
+    const { error: updErr } = await supabase.from("employees").update({ name, is_active: true }).eq("pin", pin);
+    if (updErr) console.error("[handleUserinfo] update error:", updErr.message);
+    else console.log("[handleUserinfo] updated pin:", pin);
   } else {
-    await supabase.from("employees").insert({ pin, name, is_active: true });
+    const id = crypto.randomUUID();
+    const { error: insErr } = await supabase.from("employees").insert({ id, pin, name, is_active: true });
+    if (insErr) console.error("[handleUserinfo] insert error:", insErr.message);
+    else console.log("[handleUserinfo] inserted pin:", pin, "name:", name);
   }
 }
 
-async function handleGetAllPin(supabase: any, data: Record<string, unknown>) {
-  const pins = data.pins;
-  const transId = String(data.trans_id || "1");
+async function handleGetAllPin(supabase: any, data: Record<string, unknown>, transId?: string) {
+  const pins = data.pin_arr || data.pins;
+  const tid = String(transId || data.trans_id || "1");
   if (!Array.isArray(pins)) return;
+
+  console.log(`[Webhook] Received ${pins.length} PINs:`, pins);
 
   for (const pin of pins) {
     try {
@@ -127,7 +174,7 @@ async function handleGetAllPin(supabase: any, data: Record<string, unknown>) {
           "Authorization": `Bearer ${FINGERSPOT_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ cloud_id: FINGERSPOT_CLOUD_ID, pin: pinStr, trans_id: transId }),
+        body: JSON.stringify({ cloud_id: FINGERSPOT_CLOUD_ID, pin: pinStr, trans_id: tid }),
       });
       console.log(`[Webhook] GetUserinfo for PIN ${pinStr}: ${response.status}`);
     } catch (err) {

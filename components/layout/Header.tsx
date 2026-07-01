@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils/cn";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 
 export interface HeaderProps {
   className?: string;
@@ -75,17 +77,11 @@ export function Header({ className, title, description, actions }: HeaderProps) 
           <span className="text-xs font-medium text-emerald-400">Status</span>
         </div>
 
+        {/* Theme toggle */}
+        <ThemeToggle />
+
         {/* Notifications */}
-        <button
-          type="button"
-          className="relative rounded-full p-2 text-on-surface-variant transition-colors hover:bg-white/[0.05] hover:text-on-surface"
-          aria-label="Notifications"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-          </svg>
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <NotificationBell />
 
         {/* Redeploy button */}
         <button

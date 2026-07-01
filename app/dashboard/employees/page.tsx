@@ -24,7 +24,6 @@ export default function EmployeesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState("");
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "requesting" | "waiting" | "done" | "error">("idle");
   const [syncEmployeeCount, setSyncEmployeeCount] = useState(0);
@@ -65,44 +64,6 @@ export default function EmployeesPage() {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  // Test sync locally (simulate webhook)
-  const handleTestSync = async () => {
-    setShowSyncModal(true);
-    setSyncStatus("waiting");
-    setSyncEmployeeCount(0);
-    setSyncLog(["Simulasi webhook untuk testing lokal..."]);
-
-    try {
-      const res = await fetch("/api/employees/sync/test-webhook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "get_all_pin",
-          data: { pins: ["1", "2", "3", "4", "5", "6", "7", "8"] },
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        setSyncStatus("done");
-        setSyncEmployeeCount(data.pins?.length || 0);
-        setSyncLog((prev) => [
-          ...prev,
-          `✓ ${data.pins?.length || 0} karyawan berhasil disinkronisasi`,
-          "Ini adalah simulasi untuk testing lokal",
-        ]);
-        fetchEmployees();
-      } else {
-        setSyncStatus("error");
-        setSyncLog((prev) => [...prev, `Error: ${data.error}`]);
-      }
-    } catch (error) {
-      setSyncStatus("error");
-      setSyncLog((prev) => [...prev, "Gagal melakukan simulasi"]);
-    }
-  };
-
   // Sync from device
   const handleSyncFromDevice = async () => {
     setShowSyncModal(true);
@@ -128,18 +89,19 @@ export default function EmployeesPage() {
       setSyncStatus("waiting");
       setSyncLog((prev) => [...prev, "Perintah terkirim! Menunggu response dari mesin via webhook..."]);
 
-      // Poll for new employees every 2 seconds
       const startTime = Date.now();
-      const timeout = 60000; // 60 seconds max
+      const timeout = 45000;
+      const stableDuration = 8000;
       let lastCount = 0;
+      let firstSeenAt = 0;
 
       const pollInterval = setInterval(async () => {
         const elapsed = Date.now() - startTime;
-        
+
         if (elapsed > timeout) {
           clearInterval(pollInterval);
           setSyncStatus("done");
-          setSyncLog((prev) => [...prev, "Timeout - sync selesai (beberapa data mungkin belum muncul)"]);
+          setSyncLog((prev) => [...prev, "Timeout - sync selesai"]);
           fetchEmployees();
           return;
         }
@@ -157,26 +119,24 @@ export default function EmployeesPage() {
               `✓ ${newCount} karyawan baru ditemukan (${currentCount} total)`,
             ]);
             lastCount = currentCount;
+            if (firstSeenAt === 0) firstSeenAt = Date.now();
             fetchEmployees();
           }
 
-          // Check if we should stop (no new data for 8 seconds)
-          if (elapsed > 8000 && currentCount === lastCount) {
+          if (firstSeenAt > 0 && (Date.now() - firstSeenAt) > stableDuration && currentCount > 0) {
             clearInterval(pollInterval);
             setSyncStatus("done");
             setSyncLog((prev) => [
               ...prev,
-              currentCount > 0
-                ? `Sync selesai! ${currentCount} karyawan berhasil disinkronisasi.`
-                : "Tidak ada data baru dari mesin. Pastikan mesin online dan sudah register PIN.",
+              `Sync selesai! ${currentCount} karyawan berhasil disinkronisasi.`,
             ]);
+            fetchEmployees();
           }
         } catch {
           // Ignore poll errors
         }
       }, 2000);
 
-      // Initial fetch
       fetchEmployees();
     } catch (error) {
       setSyncStatus("error");
@@ -352,9 +312,6 @@ export default function EmployeesPage() {
               </svg>
             )}
             Sync dari Mesin
-          </Button>
-          <Button variant="secondary" size="md" onClick={handleTestSync}>
-            Test Sync (Lokal)
           </Button>
           <Button variant="primary" size="md" onClick={() => setShowAddModal(true)}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { broadcastNotification } from "@/lib/notifications";
 
 export async function PUT(
   request: NextRequest,
@@ -8,7 +9,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status } = body;
+    const { status, notes } = body;
 
     if (!["APPROVED", "REJECTED"].includes(status)) {
       return NextResponse.json(
@@ -19,6 +20,7 @@ export async function PUT(
 
     const permission = await prisma.permission.findUnique({
       where: { id },
+      include: { employee: { select: { name: true } } },
     });
 
     if (!permission) {
@@ -30,11 +32,32 @@ export async function PUT(
 
     const updated = await prisma.permission.update({
       where: { id },
-      data: { status },
+      data: { status, notes: notes || null },
       include: {
         employee: { select: { name: true } },
       },
     });
+
+    const typeLabel =
+      permission.type === "SICK"
+        ? "Sakit"
+        : permission.type === "CUTI"
+        ? "Cuti"
+        : "Izin";
+
+    if (status === "APPROVED") {
+      broadcastNotification({
+        type: "PERMISSION_APPROVED",
+        title: "Izin Disetujui",
+        message: `Izin ${typeLabel} untuk ${permission.employee.name} telah disetujui`,
+      });
+    } else {
+      broadcastNotification({
+        type: "PERMISSION_REJECTED",
+        title: "Izin Ditolak",
+        message: `Izin ${typeLabel} untuk ${permission.employee.name} telah ditolak`,
+      });
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

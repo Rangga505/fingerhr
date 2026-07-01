@@ -11,6 +11,7 @@ interface Permission {
   startDate: string;
   endDate: string;
   reason: string | null;
+  notes: string | null;
   status: string;
   createdAt: string;
   employee: { name: string; pin: string; department: string | null };
@@ -31,6 +32,14 @@ export default function PermissionsPage() {
 
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    permissionId: string;
+    permissionName: string;
+    action: "APPROVED" | "REJECTED";
+  }>({ open: false, permissionId: "", permissionName: "", action: "APPROVED" });
+  const [actionNotes, setActionNotes] = useState("");
 
   const [formData, setFormData] = useState({
     employeeId: "",
@@ -105,12 +114,12 @@ export default function PermissionsPage() {
     }
   };
 
-  const handleApprove = async (id: string) => {
+  const handleApprove = async (id: string, notes?: string) => {
     try {
       const res = await fetch(`/api/permissions/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "APPROVED" }),
+        body: JSON.stringify({ status: "APPROVED", notes: notes || null }),
       });
 
       if (!res.ok) {
@@ -124,12 +133,12 @@ export default function PermissionsPage() {
     }
   };
 
-  const handleReject = async (id: string) => {
+  const handleReject = async (id: string, notes?: string) => {
     try {
       const res = await fetch(`/api/permissions/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REJECTED" }),
+        body: JSON.stringify({ status: "REJECTED", notes: notes || null }),
       });
 
       if (!res.ok) {
@@ -141,6 +150,21 @@ export default function PermissionsPage() {
     } catch (error) {
       alert("Gagal menolak izin");
     }
+  };
+
+  const openConfirmDialog = (id: string, name: string, action: "APPROVED" | "REJECTED") => {
+    setActionNotes("");
+    setConfirmDialog({ open: true, permissionId: id, permissionName: name, action });
+  };
+
+  const handleConfirmAction = async () => {
+    const { permissionId, action } = confirmDialog;
+    if (action === "APPROVED") {
+      await handleApprove(permissionId, actionNotes);
+    } else {
+      await handleReject(permissionId, actionNotes);
+    }
+    setConfirmDialog({ open: false, permissionId: "", permissionName: "", action: "APPROVED" });
   };
 
   const getStatusBadge = (status: string) => {
@@ -303,6 +327,7 @@ export default function PermissionsPage() {
                     <th className="px-6 py-4 text-left text-xs font-medium text-on-surface-variant">Tipe</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-on-surface-variant">Tanggal</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-on-surface-variant">Alasan</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-on-surface-variant">Catatan</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-on-surface-variant">Status</th>
                     <th className="px-6 py-4 text-right text-xs font-medium text-on-surface-variant">Aksi</th>
                   </tr>
@@ -330,13 +355,18 @@ export default function PermissionsPage() {
                           {perm.reason || "-"}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-on-surface-variant line-clamp-1">
+                          {perm.notes || "-"}
+                        </span>
+                      </td>
                       <td className="px-6 py-4">{getStatusBadge(perm.status)}</td>
                       <td className="px-6 py-4">
                         {perm.status === "PENDING" && (
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
-                              onClick={() => handleApprove(perm.id)}
+                              onClick={() => openConfirmDialog(perm.id, perm.employee.name, "APPROVED")}
                               className="rounded-lg p-2 text-emerald-400 transition-colors hover:bg-emerald-500/10"
                               title="Setujui"
                             >
@@ -346,7 +376,7 @@ export default function PermissionsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleReject(perm.id)}
+                              onClick={() => openConfirmDialog(perm.id, perm.employee.name, "REJECTED")}
                               className="rounded-lg p-2 text-error transition-colors hover:bg-error/10"
                               title="Tolak"
                             >
@@ -440,6 +470,45 @@ export default function PermissionsPage() {
                 disabled={submitting || !formData.employeeId}
               >
                 {submitting ? "Mengirim..." : "Ajukan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Confirmation Dialog */}
+      {confirmDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="glass mx-4 w-full max-w-md rounded-3xl border border-white/[0.08] p-6">
+            <h3 className="text-lg font-semibold text-on-surface">
+              {confirmDialog.action === "APPROVED" ? "Setujui Izin" : "Tolak Izin"}
+            </h3>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              {confirmDialog.action === "APPROVED"
+                ? `Menyetujui izin untuk ${confirmDialog.permissionName}?`
+                : `Menolak izin untuk ${confirmDialog.permissionName}?`}
+            </p>
+            <div className="mt-4">
+              <label className="mb-2 block text-sm font-medium text-on-surface">Catatan Admin (opsional)</label>
+              <textarea
+                value={actionNotes}
+                onChange={(e) => setActionNotes(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-white/[0.08] bg-surface-container px-4 py-3 text-sm text-on-surface transition-all placeholder:text-on-surface-variant/50 focus:border-primary/50 focus:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Tambahkan catatan untuk keputusan ini..."
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDialog({ open: false, permissionId: "", permissionName: "", action: "APPROVED" })}
+              >
+                Batal
+              </Button>
+              <Button
+                variant={confirmDialog.action === "APPROVED" ? "primary" : "secondary"}
+                onClick={handleConfirmAction}
+              >
+                {confirmDialog.action === "APPROVED" ? "Setujui" : "Tolak"}
               </Button>
             </div>
           </div>

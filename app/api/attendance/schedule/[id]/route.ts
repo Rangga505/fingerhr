@@ -4,8 +4,12 @@ import { z } from "zod";
 
 const scheduleUpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  startTime: z.string().regex(/^([01]?[2-9]|1[0-2]):[0-5][0-9]$/).optional(),
-  endTime: z.string().regex(/^([01]?[2-9]|1[0-2]):[0-5][0-9]$/).optional(),
+  startTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  endTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  breakStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().nullable(),
+  breakEnd: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().nullable(),
+  overtimeStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().nullable(),
+  overtimeRate: z.number().min(1).max(5).optional(),
   graceMinutes: z.number().min(0).max(120).optional(),
   isActive: z.boolean().optional(),
 });

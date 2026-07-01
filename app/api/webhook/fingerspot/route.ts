@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { getUserInfo } from "@/lib/fingerspot";
+import { broadcastNotification } from "@/lib/notifications";
 
 interface WebhookPayload {
   type: string;
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleAttlog(deviceId: string, data: Record<string, any>) {
-  const { pin, scan, verify, status_scan } = data;
+  const { pin, scan, verify, status_scan, latitude, longitude, wifi_ssid } = data;
 
   if (!pin || !scan) {
     console.warn("[Webhook] Attlog missing required fields:", data);
@@ -147,11 +148,35 @@ async function handleAttlog(deviceId: string, data: Record<string, any>) {
     return;
   }
 
-  // Determine status (1=IN, 0=OUT)
-  const status = status_scan === "1" || status_scan === 1 ? "IN" : "OUT";
+  // Parse scan time - device sends local time in WIB (Asia/Jakarta, UTC+7)
+  // Convert "2026-07-01 08:12:10" to "2026-07-01T08:12:10+07:00" for correct parsing
+  const scanTimeStr = String(scan).replace(" ", "T") + "+07:00";
+  const scanTime = new Date(scanTimeStr);
 
-  // Parse scan time
-  const scanTime = new Date(scan);
+  // Count existing logs for this employee today (in WIB timezone)
+  // Calculate WIB date from the scan time
+  const wibDate = new Date(scanTime.getTime() + 7 * 60 * 60 * 1000);
+  const wibYear = wibDate.getUTCFullYear();
+  const wibMonth = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+  const wibDay = String(wibDate.getUTCDate()).padStart(2, "0");
+  const wibDateStr = `${wibYear}-${wibMonth}-${wibDay}`;
+
+  // Query boundaries in UTC (midnight WIB = 17:00 UTC previous day)
+  const startOfDay = new Date(`${wibDateStr}T00:00:00+07:00`);
+  const endOfDay = new Date(`${wibDateStr}T23:59:59.999+07:00`);
+
+  const todayLogCount = await prisma.attendanceLog.count({
+    where: {
+      employeeId: employee.id,
+      scanTime: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    },
+  });
+
+  // First scan of the day = IN, second = OUT, third = IN, etc.
+  const status = todayLogCount % 2 === 0 ? "IN" : "OUT";
 
   // Check for duplicate (same employee, same time, same device)
   const existing = await prisma.attendanceLog.findFirst({
@@ -167,7 +192,12 @@ async function handleAttlog(deviceId: string, data: Record<string, any>) {
     return;
   }
 
-  // Save attendance log
+  // Save attendance log (include location data in rawPayload if available)
+  const rawPayload: Record<string, any> = { ...data };
+  if (latitude != null) rawPayload.latitude = latitude;
+  if (longitude != null) rawPayload.longitude = longitude;
+  if (wifi_ssid) rawPayload.wifi_ssid = wifi_ssid;
+
   await prisma.attendanceLog.create({
     data: {
       employeeId: employee.id,
@@ -176,8 +206,17 @@ async function handleAttlog(deviceId: string, data: Record<string, any>) {
       verifyMethod: String(verify || "1"),
       status,
       type: "realtime",
-      rawPayload: data,
+      rawPayload,
     },
+  });
+
+  // Broadcast real-time notification
+  const notificationType = status === "IN" ? "ATTENDANCE_IN" : "ATTENDANCE_OUT";
+  const timeStr = scanTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+  broadcastNotification({
+    type: notificationType,
+    title: status === "IN" ? "Kehadiran Tercatat" : "Keluar Tercatat",
+    message: `${employee.name} ${status === "IN" ? "masuk" : "keluar"} pukul ${timeStr}`,
   });
 
   console.log("[Webhook] Attlog saved:", { employee: employee.name, status, scan });

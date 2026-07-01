@@ -46,3 +46,80 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { employeeId, deviceId, scanTime, verifyMethod, status } = body;
+
+    if (!employeeId || !deviceId || !scanTime) {
+      return NextResponse.json(
+        { error: "employeeId, deviceId, dan scanTime wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    // Check for duplicate
+    const scanDate = new Date(scanTime);
+    const existing = await prisma.attendanceLog.findFirst({
+      where: {
+        employeeId,
+        deviceId,
+        scanTime: scanDate,
+      },
+    });
+
+    if (existing) {
+      return NextResponse.json(
+        { error: "Data absensi untuk waktu ini sudah ada" },
+        { status: 409 }
+      );
+    }
+
+    // Determine status based on count today (alternate IN/OUT)
+    // Calculate WIB date from the scan time
+    const wibDate = new Date(scanDate.getTime() + 7 * 60 * 60 * 1000);
+    const wibYear = wibDate.getUTCFullYear();
+    const wibMonth = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+    const wibDay = String(wibDate.getUTCDate()).padStart(2, "0");
+    const wibDateStr = `${wibYear}-${wibMonth}-${wibDay}`;
+
+    const startOfDay = new Date(`${wibDateStr}T00:00:00+07:00`);
+    const endOfDay = new Date(`${wibDateStr}T23:59:59.999+07:00`);
+
+    const todayLogCount = await prisma.attendanceLog.count({
+      where: {
+        employeeId,
+        scanTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+    });
+
+    const autoStatus = todayLogCount % 2 === 0 ? "IN" : "OUT";
+
+    const log = await prisma.attendanceLog.create({
+      data: {
+        employeeId,
+        deviceId,
+        scanTime: scanDate,
+        verifyMethod: verifyMethod || "1",
+        status: status || autoStatus,
+        type: "manual",
+      },
+      include: {
+        employee: { select: { name: true, pin: true, department: true } },
+        device: { select: { name: true } },
+      },
+    });
+
+    return NextResponse.json(log, { status: 201 });
+  } catch (error) {
+    console.error("[API] Create attendance log error:", error);
+    return NextResponse.json(
+      { error: "Gagal membuat data absensi" },
+      { status: 500 }
+    );
+  }
+}

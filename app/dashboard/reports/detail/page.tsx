@@ -21,6 +21,10 @@ interface Schedule {
   name: string;
   startTime: string;
   endTime: string;
+  breakStart: string | null;
+  breakEnd: string | null;
+  overtimeStart: string | null;
+  overtimeRate: number;
   graceMinutes: number;
 }
 
@@ -33,6 +37,7 @@ interface DailyReport {
   status: string;
   lateMinutes: number;
   earlyLeaveMinutes: number;
+  overtimeMinutes: number;
   workDuration: string;
   notes: string;
 }
@@ -42,6 +47,8 @@ interface ReportSummary {
   present: number;
   late: number;
   earlyLeave: number;
+  overtime: number;
+  totalOvertimeMinutes: number;
   absent: number;
   permission: number;
 }
@@ -85,27 +92,33 @@ export default function DetailReportsPage() {
         name: "SM1",
         startTime: "08:30",
         endTime: "16:30",
+        breakStart: null,
+        breakEnd: null,
+        overtimeStart: null,
+        overtimeRate: 1.5,
         graceMinutes: 15,
       };
 
       // Generate daily reports
       const year = parseInt(month.split("-")[0]);
       const monthNum = parseInt(month.split("-")[1]);
-      const daysInMonth = new Date(year, monthNum, 0).getDate();
+      const daysInMonth = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
       const reports: DailyReport[] = [];
 
       let present = 0;
       let late = 0;
       let earlyLeave = 0;
+      let overtime = 0;
+      let totalOvertimeMinutes = 0;
       let absent = 0;
 
       for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(year, monthNum - 1, day);
+        const date = new Date(Date.UTC(year, monthNum - 1, day));
         const dateStr = date.toISOString().split("T")[0];
-        const dayName = date.toLocaleDateString("id-ID", { weekday: "long" });
+        const dayName = date.toLocaleDateString("id-ID", { weekday: "long", timeZone: "Asia/Jakarta" });
 
-        // Skip weekends
-        if (date.getDay() === 0 || date.getDay() === 6) {
+        // Skip weekends (use UTC day)
+        if (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
           continue;
         }
 
@@ -151,6 +164,18 @@ export default function DetailReportsPage() {
           }
         }
 
+        // Calculate overtime
+        let overtimeMinutes = 0;
+        if (clockOut && schedule.overtimeStart) {
+          const [otHour, otMin] = schedule.overtimeStart.split(":").map(Number);
+          const [clockHour, clockMin] = clockOut.split(":").map(Number);
+          const otTotal = otHour * 60 + otMin;
+          const clockTotal = clockHour * 60 + clockMin;
+          if (clockTotal > otTotal) {
+            overtimeMinutes = clockTotal - otTotal;
+          }
+        }
+
         // Determine status
         let status = "Alpha";
         let notes = "Tidak hadir";
@@ -169,6 +194,12 @@ export default function DetailReportsPage() {
           if (earlyLeaveMinutes > 0) {
             notes += `, Pulang cepat ${earlyLeaveMinutes} menit`;
             earlyLeave++;
+          }
+
+          if (overtimeMinutes > 0) {
+            notes += `, Lembur ${overtimeMinutes} menit`;
+            overtime++;
+            totalOvertimeMinutes += overtimeMinutes;
           }
         } else {
           absent++;
@@ -194,6 +225,7 @@ export default function DetailReportsPage() {
           status,
           lateMinutes,
           earlyLeaveMinutes,
+          overtimeMinutes,
           workDuration,
           notes,
         });
@@ -205,6 +237,8 @@ export default function DetailReportsPage() {
         present,
         late,
         earlyLeave,
+        overtime,
+        totalOvertimeMinutes,
         absent,
         permission: 0,
       });
@@ -349,7 +383,7 @@ export default function DetailReportsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
             <Card variant="glass">
               <CardContent className="py-4 text-center">
                 <p className="text-xs font-medium text-on-surface-variant">Total Hari Kerja</p>
@@ -372,6 +406,13 @@ export default function DetailReportsPage() {
               <CardContent className="py-4 text-center">
                 <p className="text-xs font-medium text-on-surface-variant">Pulang Cepat</p>
                 <p className="mt-1 text-2xl font-semibold text-blue-400">{summary.earlyLeave}</p>
+              </CardContent>
+            </Card>
+            <Card variant="glass">
+              <CardContent className="py-4 text-center">
+                <p className="text-xs font-medium text-on-surface-variant">Lembur</p>
+                <p className="mt-1 text-2xl font-semibold text-purple-400">{summary.overtime}</p>
+                <p className="text-xs text-on-surface-variant">{summary.totalOvertimeMinutes} menit</p>
               </CardContent>
             </Card>
             <Card variant="glass">

@@ -18,17 +18,17 @@ enum UserRole {
 }
 
 model User {
-  id                 String    @id @default(cuid())
-  name               String
-  email              String    @unique
-  password           String
-  role               UserRole  @default(VIEWER)
-  image              String?
-  emailVerified      DateTime? @map("email_verified")
-  twoFactorEnabled   Boolean   @default(false) @map("two_factor_enabled")
-  twoFactorSecret    String?   @map("two_factor_secret")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  password         String
+  role             UserRole  @default(VIEWER)
+  image            String?
+  emailVerified    DateTime? @map("email_verified")
+  twoFactorEnabled Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?   @map("two_factor_secret")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -38,20 +38,20 @@ model User {
 // ============================================
 
 model Employee {
-  id           String   @id @default(cuid())
-  pin          String   @unique  // PIN di mesin absensi
-  name         String
-  email        String?  @unique
-  phone        String?
-  department   String?
-  position     String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  pin        String   @unique // PIN di mesin absensi
+  name       String
+  email      String?  @unique
+  phone      String?
+  department String?
+  position   String?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  attendanceLogs  AttendanceLog[]
-  schedules       EmployeeSchedule[]
-  permissions     Permission[]
+  attendanceLogs AttendanceLog[]
+  schedules      EmployeeSchedule[]
+  permissions    Permission[]
 
   @@map("employees")
 }
@@ -87,7 +87,7 @@ model AttendanceLog {
   deviceId     String   @map("device_id")
   scanTime     DateTime @map("scan_time")
   verifyMethod String?  @map("verify_method") // 1=Password, 2=Fingerprint, 3=Card
-  status       String   // "IN" atau "OUT"
+  status       String // "IN" atau "OUT"
   type         String   @default("manual") // "realtime" atau "manual"
   rawPayload   Json?    @map("raw_payload")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -106,14 +106,18 @@ model AttendanceLog {
 // ============================================
 
 model Schedule {
-  id           String   @id @default(cuid())
-  name         String   // "SM1", "SM2", "Reguler"
-  startTime    String   @map("start_time") // "08:30"
-  endTime      String   @map("end_time")   // "16:30"
-  graceMinutes Int      @default(15) @map("grace_minutes") // toleransi terlambat (menit)
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  name          String // "SM1", "SM2", "Reguler"
+  startTime     String   @map("start_time") // "08:30"
+  endTime       String   @map("end_time") // "16:30"
+  breakStart    String?  @map("break_start") // "12:00"
+  breakEnd      String?  @map("break_end") // "13:00"
+  overtimeStart String?  @map("overtime_start") // "17:00" - when overtime begins
+  overtimeRate  Float    @default(1.5) @map("overtime_rate") // multiplier for OT pay
+  graceMinutes  Int      @default(15) @map("grace_minutes") // toleransi terlambat (menit)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   employees EmployeeSchedule[]
 
@@ -145,16 +149,17 @@ model EmployeeSchedule {
 // ============================================
 
 model Permission {
-  id          String   @id @default(cuid())
-  employeeId  String   @map("employee_id")
-  type        String   // "SICK", "CUTI", "IZIN"
-  startDate   DateTime @map("start_date")
-  endDate     DateTime @map("end_date")
-  reason      String?  @db.Text
-  status      String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
-  approvedBy  String?  @map("approved_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  type       String // "SICK", "CUTI", "IZIN"
+  startDate  DateTime @map("start_date")
+  endDate    DateTime @map("end_date")
+  reason     String?  @db.Text
+  notes      String?  @db.Text // admin notes when approving/rejecting
+  status     String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  approvedBy String?  @map("approved_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -168,16 +173,16 @@ model Permission {
 // ============================================
 
 model ApiLog {
-  id              String    @id @default(cuid())
-  command         String    // "GET_ATTLOG", "SET_USERINFO", "GET_USERINFO", dll
-  deviceCloudId   String    @map("device_cloud_id")
-  transId         String?   @map("trans_id")
-  status          String    @default("PENDING") // "PENDING", "SUCCESS", "FAILED"
-  requestPayload  Json?     @map("request_payload")
-  responsePayload Json?     @map("response_payload")
-  errorMessage    String?   @map("error_message") @db.Text
-  duration        Int?      // dalam milidetik
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  command         String // "GET_ATTLOG", "SET_USERINFO", "GET_USERINFO", dll
+  deviceCloudId   String   @map("device_cloud_id")
+  transId         String?  @map("trans_id")
+  status          String   @default("PENDING") // "PENDING", "SUCCESS", "FAILED"
+  requestPayload  Json?    @map("request_payload")
+  responsePayload Json?    @map("response_payload")
+  errorMessage    String?  @map("error_message") @db.Text
+  duration        Int? // dalam milidetik
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([command])
   @@index([status])
@@ -191,7 +196,7 @@ model ApiLog {
 
 model WebhookLog {
   id            String   @id @default(cuid())
-  type          String   // "REALTIME_ATTLOG", "GET_USERINFO", "SET_USERINFO", dll
+  type          String // "REALTIME_ATTLOG", "GET_USERINFO", "SET_USERINFO", dll
   deviceCloudId String   @map("device_cloud_id")
   status        String   @default("SUCCESS") // "SUCCESS", "FAILED"
   payload       Json?

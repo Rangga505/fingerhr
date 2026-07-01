@@ -26,6 +26,19 @@ interface RecentAttendance {
   };
 }
 
+interface RecentPermission {
+  id: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  createdAt: string;
+  employee: {
+    name: string;
+    department: string | null;
+  };
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
@@ -36,6 +49,7 @@ export default function DashboardPage() {
     pendingPermissions: 0,
   });
   const [recentAttendance, setRecentAttendance] = useState<RecentAttendance[]>([]);
+  const [recentPermissions, setRecentPermissions] = useState<RecentPermission[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = async () => {
@@ -58,6 +72,10 @@ export default function DashboardPage() {
       const permRes = await fetch("/api/permissions?status=PENDING");
       const permissions = await permRes.json();
 
+      // Fetch recent permissions (all statuses)
+      const recentPermRes = await fetch("/api/permissions");
+      const recentPerms = await recentPermRes.json();
+
       setStats({
         totalEmployees: employees.length,
         activeEmployees: employees.filter((e: any) => e.isActive).length,
@@ -68,6 +86,7 @@ export default function DashboardPage() {
       });
 
       setRecentAttendance(attendance.slice(0, 10));
+      setRecentPermissions(recentPerms.slice(0, 5));
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
     } finally {
@@ -172,11 +191,14 @@ export default function DashboardPage() {
                   {loading ? "-" : stats.pendingPermissions}
                 </p>
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10">
+              <a
+                href="/dashboard/attendance/permissions"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 transition-colors hover:bg-amber-500/20"
+              >
                 <svg className="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              </div>
+              </a>
             </div>
           </CardContent>
         </Card>
@@ -229,6 +251,64 @@ export default function DashboardPage() {
                     >
                       {log.status === "IN" ? "Masuk" : "Keluar"}
                     </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Permissions */}
+      <Card variant="glass-high">
+        <div className="border-b border-white/[0.08] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-on-surface">Izin Terbaru</h3>
+            <a href="/dashboard/attendance/permissions" className="text-xs text-primary hover:underline">
+              Lihat Semua
+            </a>
+          </div>
+        </div>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : recentPermissions.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-on-surface-variant">Belum ada data izin</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-white/[0.05]">
+              {recentPermissions.map((perm) => (
+                <div key={perm.id} className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-surface-container/50">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-container to-tertiary-container text-sm font-medium text-white">
+                    {perm.employee.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-on-surface">{perm.employee.name}</p>
+                    <p className="text-xs text-on-surface-variant">
+                      {perm.type === "SICK" ? "Sakit" : perm.type === "CUTI" ? "Cuti" : "Izin"} &bull;{" "}
+                      {new Date(perm.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={cn(
+                        "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        perm.status === "APPROVED"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : perm.status === "REJECTED"
+                          ? "bg-error/10 text-error"
+                          : "bg-amber-500/10 text-amber-400"
+                      )}
+                    >
+                      {perm.status === "APPROVED" ? "Disetujui" : perm.status === "REJECTED" ? "Ditolak" : "Menunggu"}
+                    </span>
                   </div>
                 </div>
               ))}

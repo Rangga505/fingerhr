@@ -67,8 +67,31 @@ export async function POST(
               });
 
               if (employee) {
-                const scanTime = new Date(log.scan);
-                const statusScan = log.status_scan === "1" || log.status_scan === 1 ? "IN" : "OUT";
+                // Parse scan time - device sends local time in WIB (Asia/Jakarta, UTC+7)
+                const scanTimeStr = String(log.scan).replace(" ", "T") + "+07:00";
+                const scanTime = new Date(scanTimeStr);
+
+                // Count existing logs for this employee today (in WIB timezone)
+                const wibDate = new Date(scanTime.getTime() + 7 * 60 * 60 * 1000);
+                const wibYear = wibDate.getUTCFullYear();
+                const wibMonth = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+                const wibDay = String(wibDate.getUTCDate()).padStart(2, "0");
+                const wibDateStr = `${wibYear}-${wibMonth}-${wibDay}`;
+
+                const startOfDay = new Date(`${wibDateStr}T00:00:00+07:00`);
+                const endOfDay = new Date(`${wibDateStr}T23:59:59.999+07:00`);
+
+                const todayLogCount = await prisma.attendanceLog.count({
+                  where: {
+                    employeeId: employee.id,
+                    scanTime: {
+                      gte: startOfDay,
+                      lte: endOfDay,
+                    },
+                  },
+                });
+
+                const statusScan = todayLogCount % 2 === 0 ? "IN" : "OUT";
 
                 // Check duplicate
                 const existing = await prisma.attendanceLog.findFirst({

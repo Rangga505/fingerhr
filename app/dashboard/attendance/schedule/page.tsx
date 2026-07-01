@@ -9,6 +9,10 @@ interface Schedule {
   name: string;
   startTime: string;
   endTime: string;
+  breakStart: string | null;
+  breakEnd: string | null;
+  overtimeStart: string | null;
+  overtimeRate: number;
   graceMinutes: number;
   isActive: boolean;
   _count: { employees: number };
@@ -46,6 +50,10 @@ export default function SchedulePage() {
     name: "",
     startTime: "08:30",
     endTime: "16:30",
+    breakStart: "",
+    breakEnd: "",
+    overtimeStart: "",
+    overtimeRate: 1.5,
     graceMinutes: 15,
   });
 
@@ -110,7 +118,7 @@ export default function SchedulePage() {
       }
 
       setShowAddModal(false);
-      setFormData({ name: "", startTime: "08:30", endTime: "16:30", graceMinutes: 15 });
+      setFormData({ name: "", startTime: "08:30", endTime: "16:30", breakStart: "", breakEnd: "", overtimeStart: "", overtimeRate: 1.5, graceMinutes: 15 });
       fetchSchedules();
     } catch (error) {
       alert("Gagal menambahkan jadwal");
@@ -205,6 +213,10 @@ export default function SchedulePage() {
       name: schedule.name,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
+      breakStart: schedule.breakStart || "",
+      breakEnd: schedule.breakEnd || "",
+      overtimeStart: schedule.overtimeStart || "",
+      overtimeRate: schedule.overtimeRate,
       graceMinutes: schedule.graceMinutes,
     });
     setShowEditModal(true);
@@ -276,6 +288,18 @@ export default function SchedulePage() {
                     <span className="text-on-surface-variant">Toleransi Terlambat</span>
                     <span className="text-on-surface">{schedule.graceMinutes} menit</span>
                   </div>
+                  {schedule.breakStart && schedule.breakEnd && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-on-surface-variant">Jam Istirahat</span>
+                      <span className="text-on-surface">{schedule.breakStart} - {schedule.breakEnd}</span>
+                    </div>
+                  )}
+                  {schedule.overtimeStart && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-on-surface-variant">Lembur Mulai</span>
+                      <span className="text-on-surface">{schedule.overtimeStart} ({schedule.overtimeRate}x)</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-on-surface-variant">Karyawan Ditugaskan</span>
                     <span className="text-on-surface">{schedule._count.employees}</span>
@@ -351,6 +375,14 @@ export default function SchedulePage() {
                 <Input label="Jam Mulai *" type="time" value={formData.startTime} onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} />
                 <Input label="Jam Selesai *" type="time" value={formData.endTime} onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Istirahat Mulai" type="time" value={formData.breakStart} onChange={(e) => setFormData({ ...formData, breakStart: e.target.value })} />
+                <Input label="Istirahat Selesai" type="time" value={formData.breakEnd} onChange={(e) => setFormData({ ...formData, breakEnd: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Lembur Mulai" type="time" value={formData.overtimeStart} onChange={(e) => setFormData({ ...formData, overtimeStart: e.target.value })} />
+                <Input label="Rate Lembur" type="number" step="0.1" min="1" max="5" value={formData.overtimeRate} onChange={(e) => setFormData({ ...formData, overtimeRate: parseFloat(e.target.value) || 1.5 })} />
+              </div>
               <Input label="Toleransi (menit)" type="number" value={formData.graceMinutes} onChange={(e) => setFormData({ ...formData, graceMinutes: parseInt(e.target.value) || 15 })} />
             </div>
             <div className="mt-6 flex justify-end gap-3">
@@ -372,6 +404,14 @@ export default function SchedulePage() {
                 <Input label="Jam Mulai *" type="time" value={formData.startTime} onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} />
                 <Input label="Jam Selesai *" type="time" value={formData.endTime} onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Istirahat Mulai" type="time" value={formData.breakStart} onChange={(e) => setFormData({ ...formData, breakStart: e.target.value })} />
+                <Input label="Istirahat Selesai" type="time" value={formData.breakEnd} onChange={(e) => setFormData({ ...formData, breakEnd: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Lembur Mulai" type="time" value={formData.overtimeStart} onChange={(e) => setFormData({ ...formData, overtimeStart: e.target.value })} />
+                <Input label="Rate Lembur" type="number" step="0.1" min="1" max="5" value={formData.overtimeRate} onChange={(e) => setFormData({ ...formData, overtimeRate: parseFloat(e.target.value) || 1.5 })} />
+              </div>
               <Input label="Toleransi (menit)" type="number" value={formData.graceMinutes} onChange={(e) => setFormData({ ...formData, graceMinutes: parseInt(e.target.value) || 15 })} />
             </div>
             <div className="mt-6 flex justify-end gap-3">
@@ -381,8 +421,6 @@ export default function SchedulePage() {
           </div>
         </div>
       )}
-
-      {/* Delete Modal */}
       {showDeleteModal && selectedSchedule && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="glass mx-4 w-full max-w-md rounded-3xl border border-white/[0.08] p-6">
